@@ -2,10 +2,12 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 
@@ -245,9 +247,14 @@ func (api *API) handleStates() {
 	}
 }
 
-// Register all the routes and then serve the API
-func (api *API) ListenAndServe(port int) error {
-	r := mux.NewRouter()
+// Register all the routes and then serve the API optionally passing a TLS
+// configuration for API authentication
+func (api *API) ListenAndServe(port int, config *tls.Config) error {
+	var (
+		addr = fmt.Sprintf(":%d", port)
+		r    = mux.NewRouter()
+	)
+
 	api.m.Log.WithFields(logrus.Fields{"port": port}).Info("Starting API...")
 
 	endpoints := map[string]map[string]func(w http.ResponseWriter, r *http.Request){
@@ -281,7 +288,33 @@ func (api *API) ListenAndServe(port int) error {
 			})
 		}
 	}
+
 	r.PathPrefix("/").Handler(http.FileServer(&assetfs.AssetFS{Asset, AssetDir, "./static/"}))
+
 	go api.handleStates()
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), r)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	l, err := newListener(addr, config)
+	if err != nil {
+		return err
+	}
+
+	return server.Serve(l)
+}
+
+func newListener(addr string, config *tls.Config) (net.Listener, error) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if config != nil {
+		l = tls.NewListener(l, config)
+	}
+
+	return l, nil
 }

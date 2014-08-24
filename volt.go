@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,11 +17,13 @@ import (
 )
 
 var (
-	port   int
-	master string
-	user   string
-	ip     string
-	debug  bool
+	port      int
+	master    string
+	user      string
+	ip        string
+	debug     bool
+	cert, key string
+	ca        string
 
 	log             = logrus.New()
 	frameworkName   = "volt"
@@ -31,6 +36,9 @@ func init() {
 	flag.BoolVar(&debug, []string{"D", "-debug"}, false, "")
 	flag.StringVar(&user, []string{"u", "-user"}, "root", "User to execute tasks as")
 	flag.StringVar(&ip, []string{"-ip"}, "", "IP address to listen on [default: autodetect]")
+	flag.StringVar(&ca, []string{"-ca"}, "", "TLS CA Certificate file")
+	flag.StringVar(&cert, []string{"-cert"}, "", "TLS Certificate file")
+	flag.StringVar(&key, []string{"-key"}, "", "TLS Key file")
 
 	flag.Parse()
 }
@@ -50,8 +58,45 @@ func waitForSignals(m *mesoslib.MesosLib) {
 	}
 }
 
+func getTLSConfig() (*tls.Config, error) {
+	if cert == "" {
+		return nil, nil
+	}
+
+	file, err := ioutil.ReadFile(ca)
+	if err != nil {
+		return nil, err
+	}
+
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(file)
+
+	config := &tls.Config{
+		InsecureSkipVerify: true,
+		RootCAs:            pool,
+	}
+
+	cert, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
+
+	config.Certificates = []tls.Certificate{cert}
+
+	return config, nil
+}
+
 func main() {
-	frameworkInfo := &mesosproto.FrameworkInfo{Name: &frameworkName, User: &user}
+	var (
+		err    error
+		config *tls.Config
+
+		frameworkInfo = &mesosproto.FrameworkInfo{Name: &frameworkName, User: &user}
+	)
+
+	if config, err = getTLSConfig(); err != nil {
+		log.Fatal(err)
+	}
 
 	if debug {
 		log.Level = logrus.DebugLevel
@@ -76,7 +121,7 @@ func main() {
 	go waitForSignals(m)
 
 	// once we are registered, start the API
-	if err := api.NewAPI(m).ListenAndServe(port); err != nil {
+	if err := api.NewAPI(m).ListenAndServe(port, config); err != nil {
 		log.Fatal(err)
 	}
 }
