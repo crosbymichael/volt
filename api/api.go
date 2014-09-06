@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/VoltFramework/volt/etcd"
 	"github.com/VoltFramework/volt/inmemory"
 	"github.com/VoltFramework/volt/mesoslib"
 	"github.com/VoltFramework/volt/mesosproto"
@@ -243,10 +244,15 @@ func (api *API) handleStates() {
 }
 
 // Register all the routes and then serve the API
-func ListenAndServe(m *mesoslib.MesosLib, port int) {
+func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 	api := &API{
-		m:        m,
-		registry: inmemory.New(),
+		m: m,
+	}
+
+	if len(machines) > 0 {
+		api.registry = etcd.New(machines)
+	} else {
+		api.registry = inmemory.New()
 	}
 
 	endpoints := map[string]map[string]func(w http.ResponseWriter, r *http.Request){

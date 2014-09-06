@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	port   int
-	master string
-	user   string
-	ip     string
-	debug  bool
+	port    int
+	master  string
+	user    string
+	ip      string
+	debug   bool
+	machine string
 
 	log             = logrus.New()
 	frameworkName   = "volt"
@@ -31,6 +32,7 @@ func init() {
 	flag.BoolVar(&debug, []string{"D", "-debug"}, false, "")
 	flag.StringVar(&user, []string{"u", "-user"}, "root", "User to execute tasks as")
 	flag.StringVar(&ip, []string{"-ip"}, "", "IP address to listen on [default: autodetect]")
+	flag.StringVar(&machine, []string{"-machine"}, "", "etcd machine to connect to")
 
 	flag.Parse()
 }
@@ -73,7 +75,15 @@ func setupLogger() error {
 }
 
 func main() {
-	frameworkInfo := &mesosproto.FrameworkInfo{Name: &frameworkName, User: &user}
+	var (
+		frameworkInfo = &mesosproto.FrameworkInfo{Name: &frameworkName, User: &user}
+		machines      []string
+	)
+
+	if machine != "" {
+		log.Printf("%s machine\n", machine)
+		machines = []string{machine}
+	}
 
 	if err := setupLogger(); err != nil {
 		log.Fatal(err)
@@ -83,7 +93,7 @@ func main() {
 	m := mesoslib.NewMesosLib(master, log, frameworkInfo, ip, port)
 
 	// start the API
-	api.ListenAndServe(m, port)
+	api.ListenAndServe(m, port, machines)
 
 	// try to register against the master
 	if err := m.RegisterFramework(); err != nil {

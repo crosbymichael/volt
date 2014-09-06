@@ -6,15 +6,15 @@ import (
 )
 
 type Task struct {
-	ID          string   `json:"id"`
-	Command     string   `json:"cmd"`
-	Cpus        float64  `json:"cpus,string"`
-	Disk        float64  `json:"disk,string"`
-	Mem         float64  `json:"mem,string"`
-	Files       []string `json:"files"`
-	DockerImage string   `json:"docker_image"`
+	ID          string   `json:"id,omitempty"`
+	Command     string   `json:"cmd,omitempty"`
+	Cpus        float64  `json:"cpus,omitempty"`
+	Disk        float64  `json:"disk,omitempty"`
+	Mem         float64  `json:"mem,omitempty"`
+	Files       []string `json:"files,omitempty"`
+	DockerImage string   `json:"docker_image,omitempty"`
 
-	SlaveId *string               `json:"slave_id,string"`
-	State   *mesosproto.TaskState `json:"state,string"`
+	SlaveId *string               `json:"slave_id,omitempty"`
+	State   *mesosproto.TaskState `json:"state,omitempty"`
 	Volumes []*mesoslib.Volume    `json:"volumes,omitempty"`
 }
