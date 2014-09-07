@@ -3,6 +3,7 @@ package etcd
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/VoltFramework/volt/mesoslib"
@@ -15,15 +16,23 @@ type Registry struct {
 	m      *mesoslib.MesosLib
 }
 
-func New(machines []string, m *mesoslib.MesosLib) *Registry {
+func New(machines []string, m *mesoslib.MesosLib) (*Registry, error) {
 	r := &Registry{
 		client: etcd.NewClient(machines),
 		m:      m,
 	}
 
+	if _, err := r.client.CreateDir("/volt/tasks", 0); err != nil && !isExists(err) {
+		return nil, err
+	}
+
+	if _, err := r.client.CreateDir("/volt/slaves", 0); err != nil && !isExists(err) {
+		return nil, err
+	}
+
 	go r.slaveUpdateLoop()
 
-	return r
+	return r, nil
 }
 
 func (r *Registry) Register(id string, t *task.Task) error {
@@ -126,4 +135,8 @@ func (r *Registry) marshal(v interface{}) (string, error) {
 
 func (r *Registry) unmarshal(data string, v interface{}) error {
 	return json.Unmarshal([]byte(data), v)
+}
+
+func isExists(err error) bool {
+	return strings.Contains(err.Error(), "Key already exists")
 }

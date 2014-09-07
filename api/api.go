@@ -316,13 +316,16 @@ func slaveByID(slaves []*mesoslib.SlaveInfo, id string) *mesoslib.SlaveInfo {
 }
 
 // Register all the routes and then serve the API
-func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
+func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) (err error) {
 	api := &API{
 		m: m,
 	}
 
 	if len(machines) > 0 {
-		api.registry = etcd.New(machines, m)
+		api.registry, err = etcd.New(machines, m)
+		if err != nil {
+			return err
+		}
 	} else {
 		api.registry = inmemory.New()
 	}
@@ -354,7 +357,7 @@ func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 
 			m.Log.WithFields(logrus.Fields{"method": _method, "route": _route}).Debug("Registering Volt-API route...")
 			m.Router.Path(_route).Methods(_method).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				m.Log.WithFields(logrus.Fields{"from": r.RemoteAddr}).Infof("[%s] %s", _method, _route)
+				m.Log.WithFields(logrus.Fields{"from": r.RemoteAddr}).Debugf("[%s] %s", _method, _route)
 				_fct(w, r)
 			})
 		}
@@ -367,4 +370,6 @@ func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 			m.Log.Fatal(err)
 		}
 	}()
+
+	return nil
 }
