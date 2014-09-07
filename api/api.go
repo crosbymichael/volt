@@ -72,28 +72,31 @@ func (api *API) tasksAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f := func() error {
-		var resources = api.m.BuildResources(task.Cpus, task.Mem, task.Disk)
+		resources := api.m.BuildResources(task.Cpus, task.Mem, task.Disk)
+
 		offers, err := api.m.RequestOffers(resources)
 		if err != nil {
 			return err
 		}
 
-		if len(offers) > 0 {
-			task.SlaveId = offers[0].SlaveId.Value
-
-			if err := api.registry.Update(task.ID, task); err != nil {
-				return err
-			}
-
-			return api.m.LaunchTask(offers[0], resources, &mesoslib.Task{
-				ID:      task.ID,
-				Command: strings.Split(task.Command, " "),
-				Image:   task.DockerImage,
-				Volumes: task.Volumes,
-			})
+		offer, err := api.chooseOffer(offers, task)
+		if err != nil {
+			return err
 		}
 
-		return fmt.Errorf("No offers available")
+		task.SlaveId = offer.SlaveId.Value
+
+		if err := api.registry.Update(task.ID, task); err != nil {
+			return err
+		}
+
+		return api.m.LaunchTask(offer, resources, &mesoslib.Task{
+			ID:      task.ID,
+			Command: strings.Split(task.Command, " "),
+			Image:   task.DockerImage,
+			Volumes: task.Volumes,
+		})
+
 	}
 
 	if len(task.Files) > 0 {
@@ -243,6 +246,7 @@ func (api *API) handleStates() {
 	}
 }
 
+// slaves returns all the slaves currently connected to the master
 func (api *API) slaves(w http.ResponseWriter, r *http.Request) {
 	slaves, err := api.m.Slaves()
 	if err != nil {
@@ -255,6 +259,60 @@ func (api *API) slaves(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+}
+
+func (api *API) chooseOffer(offers []*mesosproto.Offer, task *task.Task) (*mesosproto.Offer, error) {
+	if len(offers) == 0 {
+		return nil, fmt.Errorf("No offers available")
+	}
+
+	// if no constraints are specified take the fast path and just return the first offer
+	if len(task.Constraints) == 0 {
+		return offers[0], nil
+	}
+
+	slaves, err := api.m.Slaves()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, o := range offers {
+		slave := slaveByID(slaves, o.SlaveId.GetValue())
+
+		if matchesConstraints(slave, task) {
+			return o, nil
+		}
+	}
+
+	return nil, fmt.Errorf("No offers available")
+}
+
+func matchesConstraints(slave *mesoslib.SlaveInfo, task *task.Task) bool {
+	for k, v := range task.Constraints {
+		switch k {
+		case "hostname":
+			if slave.Hostname != v {
+				return false
+			}
+		default:
+			sv := slave.Attributes[k]
+			if sv != v {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func slaveByID(slaves []*mesoslib.SlaveInfo, id string) *mesoslib.SlaveInfo {
+	for _, s := range slaves {
+		if s.ID == id {
+			return s
+		}
+	}
+
+	return nil
 }
 
 // Register all the routes and then serve the API

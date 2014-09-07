@@ -39,8 +39,8 @@ chmod +x volt
 ```json
 {
     "cmd": "touch /data/volt",
-    "cpus": "0.1",
-    "mem": "32",
+    "cpus": 0.1,
+    "mem": 32,
     "docker_image": "busybox",
     "volumes": [
         {
@@ -48,6 +48,19 @@ chmod +x volt
             "host_path":"/volumes/volt"
         }
     ]
+}
+```
+
+#### Run a container with specific constraints
+```json
+{
+    "cmd": "ping google.com",
+    "cpus": 0.1,
+    "mem": 32,
+    "docker_image": "busybox",
+    "constraints": {
+        "service": "loadbalancer"
+    }
 }
 ```
 
