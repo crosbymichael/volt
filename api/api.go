@@ -243,6 +243,20 @@ func (api *API) handleStates() {
 	}
 }
 
+func (api *API) slaves(w http.ResponseWriter, r *http.Request) {
+	slaves, err := api.m.Slaves()
+	if err != nil {
+		api.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(slaves); err != nil {
+		api.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+}
+
 // Register all the routes and then serve the API
 func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 	api := &API{
@@ -264,6 +278,7 @@ func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 			"/tasks/{id}/file/{file}": api.getFile,
 			"/tasks":                  api.tasksList,
 			"/metrics":                api.metrics,
+			"/slaves":                 api.slaves,
 		},
 		"POST": {
 			"/tasks": api.tasksAdd,
