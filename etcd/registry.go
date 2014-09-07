@@ -3,19 +3,27 @@ package etcd
 import (
 	"encoding/json"
 	"path/filepath"
+	"time"
 
+	"github.com/VoltFramework/volt/mesoslib"
 	"github.com/VoltFramework/volt/task"
 	"github.com/coreos/go-etcd/etcd"
 )
 
 type Registry struct {
 	client *etcd.Client
+	m      *mesoslib.MesosLib
 }
 
-func New(machines []string) *Registry {
-	return &Registry{
+func New(machines []string, m *mesoslib.MesosLib) *Registry {
+	r := &Registry{
 		client: etcd.NewClient(machines),
+		m:      m,
 	}
+
+	go r.slaveUpdateLoop()
+
+	return r
 }
 
 func (r *Registry) Register(id string, t *task.Task) error {
@@ -77,6 +85,30 @@ func (r *Registry) Update(id string, t *task.Task) error {
 func (r *Registry) Delete(id string) error {
 	_, err := r.client.Delete(r.key(id), true)
 	return err
+}
+
+func (r *Registry) slaveUpdateLoop() {
+	for _ = range time.Tick(10 * time.Second) {
+		slaves, err := r.m.Slaves()
+		if err != nil {
+			r.m.Log.WithField("error", err).Error("fetch slave information")
+
+			continue
+		}
+
+		for _, s := range slaves {
+			data, err := r.marshal(s)
+			if err != nil {
+				r.m.Log.WithField("error", err).Error("marshal slave information")
+
+				continue
+			}
+
+			if _, err := r.client.Set(filepath.Join("/volt/slaves", s.ID), data, 20); err != nil {
+				r.m.Log.WithField("error", err).Error("set slave information in etcd")
+			}
+		}
+	}
 }
 
 func (r *Registry) key(id string) string {

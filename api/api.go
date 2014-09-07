@@ -264,7 +264,7 @@ func ListenAndServe(m *mesoslib.MesosLib, port int, machines []string) {
 	}
 
 	if len(machines) > 0 {
-		api.registry = etcd.New(machines)
+		api.registry = etcd.New(machines, m)
 	} else {
 		api.registry = inmemory.New()
 	}
